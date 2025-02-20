@@ -1,0 +1,96 @@
+name: Security
+
+on:
+  push:
+    branches: [main, test]
+  pull_request:
+    branches: [main, test]
+  schedule:
+    - cron: '15 21 * * 5'  
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  enforce-security-settings:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce Security Settings via GitHub API
+        run: |
+          curl -X PATCH \
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${{ github.repository }} \
+          -d '{
+            "security_and_analysis": {
+              "advanced_security": {"status": "enabled"},
+              "secret_scanning": {"status": "enabled"},
+              "secret_scanning_push_protection": {"status": "enabled"},
+              "dependabot_security_updates": {"status": "enabled"}
+            }
+          }'
+
+  dependency-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Dependabot Alerts
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data } = await github.request("GET /repos/${{ github.repository }}/vulnerability-alerts");
+            console.log("Dependabot Alerts:", data);
+
+  codeql-analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript, python  # Change based on your repo
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Install TruffleHog
+        run: pip install trufflehog
+        
+      - name: Run TruffleHog Secret Scanner
+        run: |
+              trufflehog --json . || true
+        
+      - name: Save TruffleHog Scan Results
+        run: |
+              trufflehog --json . > trufflehog-results.json || true
+        
+      - name: Upload TruffleHog Scan Results
+        uses: actions/upload-artifact@v4
+        with:
+            name: trufflehog-results
+            path: trufflehog-results.json
+        
+
+  validity-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run YAML Linter for Configuration Validation
+        uses: ibiqlik/action-yamllint@v3
+
+      - name: Run JSON Linter
+        uses: docker://pipelinecomponents/jsonlint:latest
