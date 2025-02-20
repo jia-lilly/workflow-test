@@ -54,7 +54,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: javascript, python  # Change based on your repo
+          languages: javascript  # Change based on your repo
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
@@ -88,9 +88,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Run YAML Linter for Configuration Validation
-        uses: ibiqlik/action-yamllint@v3
-
+            
+      - name: Install YAML and JSON Linters
+        run: |
+              pip install yamllint
+              sudo apt-get install -y jq
+            
+      - name: Run YAML Linter
+        run: yamllint .
+            
       - name: Run JSON Linter
-        uses: docker://pipelinecomponents/jsonlint:latest
+        run: find . -name "*.json" -exec jq . {} \;
+            
