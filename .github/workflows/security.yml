@@ -2,9 +2,9 @@ name: Security
 
 on:
   push:
-    branches: [main, test]
+    branches: ["main"]
   pull_request:
-    branches: [main, test]
+    branches: ["main"]
   schedule:
     - cron: '15 21 * * 5'  
   workflow_dispatch: # Allows manual triggering
@@ -40,24 +40,6 @@ jobs:
           script: |
             const { data } = await github.request("GET /repos/${{ github.repository }}/vulnerability-alerts");
             console.log("Dependabot Alerts:", data);
-
-  codeql-analysis:
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: javascript  # Change based on your repo
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
 
   secret-scan:
     runs-on: ubuntu-latest
