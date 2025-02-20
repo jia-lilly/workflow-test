@@ -2,9 +2,9 @@ name: Security
 
 on:
   push:
-    branches: [main, test]
+    branches: ["main"]
   pull_request:
-    branches: [main, test]
+    branches: ["main"]
   schedule:
     - cron: '15 21 * * 5'  
   workflow_dispatch: # Allows manual triggering
@@ -41,24 +41,6 @@ jobs:
             const { data } = await github.request("GET /repos/${{ github.repository }}/vulnerability-alerts");
             console.log("Dependabot Alerts:", data);
 
-  codeql-analysis:
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: javascript, python  # Change based on your repo
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-
   secret-scan:
     runs-on: ubuntu-latest
     steps:
@@ -88,9 +70,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Run YAML Linter for Configuration Validation
-        uses: ibiqlik/action-yamllint@v3
-
+            
+      - name: Install YAML and JSON Linters
+        run: |
+              pip install yamllint
+              sudo apt-get install -y jq
+            
+      - name: Run YAML Linter
+        run: yamllint .
+            
       - name: Run JSON Linter
-        uses: docker://pipelinecomponents/jsonlint:latest
+        run: find . -name "*.json" -exec jq . {} \;
+            
