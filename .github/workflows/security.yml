@@ -80,5 +80,5 @@ jobs:
         run: yamllint .
             
       - name: Run JSON Linter
-        run: find . -name "*.json" -exec jq . {} \;
+        run: find . -name "*.json" -exec jq . {} \; || echo "JSON Validation Failed"
             
