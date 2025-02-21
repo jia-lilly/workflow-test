@@ -31,7 +31,6 @@ jobs:
             https://api.github.com/repos/${{ github.repository }} \
             -d '{"security_and_analysis": {
                 "code_scanning": {"status": "enabled"},
-                "advanced_security": {"status": "enabled"},
                 "secret_scanning": {"status": "enabled"},
                 "secret_scanning_push_protection": {"status": "enabled"},
                 "dependabot_security_updates": {"status": "enabled"},
