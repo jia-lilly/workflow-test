@@ -2,10 +2,6 @@
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  schedule:
-    - cron: '15 21 * * 5'
 
 jobs:
   security-checks:
@@ -16,19 +12,17 @@ jobs:
       contents: write
       actions: read
       packages: write
-      security-events: write  # Required to modify repository security settings
+      security-events: write  
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 🔹 Enable Debugging for better error messages
       - name: Enable Debug Logging
         run: |
           echo "GITHUB_ACTIONS_RUNNER_DEBUG=1" >> $GITHUB_ENV
           echo "GITHUB_ACTIONS_STEP_DEBUG=1" >> $GITHUB_ENV
 
-      # 🔹 Ensure Code Scanning is Enabled
       - name: Enable Security Settings
         run: |
           curl -X PATCH \
@@ -46,7 +40,6 @@ jobs:
                 }
             }'
 
-      # 🔹 Dependency Check (Fixing 'Resource not accessible' error)
       - name: Run Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
@@ -57,13 +50,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.MY_GITHUB_PAT }}
 
-      # 🔹 Initialize CodeQL
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
 
-      # 🔹 Autobuild for CodeQL
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
 
