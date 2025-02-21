@@ -29,13 +29,22 @@ jobs:
           echo "GITHUB_ACTIONS_STEP_DEBUG=1" >> $GITHUB_ENV
 
       # 🔹 Ensure Code Scanning is Enabled
-      - name: Enable Code Scanning
+      - name: Enable Security Settings
         run: |
           curl -X PATCH \
             -H "Authorization: token ${{ secrets.MY_GITHUB_PAT }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }} \
-            -d '{"security_and_analysis": {"advanced_security": {"status": "enabled"}}}'
+            -d '{"security_and_analysis": {
+                "code_scanning": {"status": "enabled"},
+                "advanced_security": {"status": "enabled"},
+                "secret_scanning": {"status": "enabled"},
+                "secret_scanning_push_protection": {"status": "enabled"},
+                "dependabot_alerts": {"status": "enabled"},
+                "dependabot_security_updates": {"status": "enabled"},
+                "validity_check": {"status": "enabled"}
+                }
+            }'
 
       # 🔹 Dependency Check (Fixing 'Resource not accessible' error)
       - name: Run Dependency Check
@@ -64,19 +73,6 @@ jobs:
         with:
           category: "/language:javascript-typescript"
 
-      # 🔹 Ensure Secret Scanning & Push Protection Are Enabled
-      - name: Enable Secret Scanning
-        run: |
-          curl -X PATCH \
-            -H "Authorization: token ${{ secrets.MY_GITHUB_PAT }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }} \
-            -d '{
-              "security_and_analysis": {
-                "secret_scanning": {"status": "enabled"},
-                "secret_scanning_push_protection": {"status": "enabled"}
-              }
-            }'
 
       # 🔹 Verify Security Settings
       - name: Verify Security Settings
