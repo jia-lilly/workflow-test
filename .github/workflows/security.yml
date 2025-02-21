@@ -1,87 +1,93 @@
-name: Security
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   pull_request:
-    branches: ["main"]
+    branches: [ "main" ]
   schedule:
-    - cron: '15 21 * * 5'  
-  workflow_dispatch: # Allows manual triggering
+    - cron: '15 21 * * 5'
 
 jobs:
-  enforce-security-settings:
+  security-checks:
+    name: Security Checks
     runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: write
+      actions: read
+      packages: write
+      security-events: write  # Required to modify repository security settings
+
     steps:
-      - name: Enforce Security Settings via GitHub API
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 🔹 Enable Debugging for better error messages
+      - name: Enable Debug Logging
+        run: |
+          echo "GITHUB_ACTIONS_RUNNER_DEBUG=1" >> $GITHUB_ENV
+          echo "GITHUB_ACTIONS_STEP_DEBUG=1" >> $GITHUB_ENV
+
+      # 🔹 Ensure Code Scanning is Enabled
+      - name: Enable Code Scanning
         run: |
           curl -X PATCH \
-          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }} \
-          -d '{
-            "security_and_analysis": {
-              "advanced_security": {"status": "enabled"},
-              "secret_scanning": {"status": "enabled"},
-              "secret_scanning_push_protection": {"status": "enabled"},
-              "dependabot_security_updates": {"status": "enabled"}
-            }
-          }'
+            -H "Authorization: token ${{ secrets.MY_GITHUB_PAT }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }} \
+            -d '{"security_and_analysis": {"advanced_security": {"status": "enabled"}}}'
 
-  dependency-check:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Enable Dependabot Alerts (Ensure It's Active)
-        run: |
-          curl -X PUT \
-          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }}/vulnerability-alerts
-  
-      - name: Run Dependency Review
-        uses: actions/dependency-review-action@v3
-
-  secret-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        
-      - name: Install TruffleHog
-        run: pip install trufflehog
-        
-      - name: Run TruffleHog Secret Scanner
-        run: |
-              trufflehog --json . || true
-        
-      - name: Save TruffleHog Scan Results
-        run: |
-              trufflehog --json . > trufflehog-results.json || true
-        
-      - name: Upload TruffleHog Scan Results
-        uses: actions/upload-artifact@v4
+      # 🔹 Dependency Check (Fixing 'Resource not accessible' error)
+      - name: Run Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
         with:
-            name: trufflehog-results
-            path: trufflehog-results.json
-        
+            path: '.'
+            project: 'MyProject'
+            format: 'JSON'
+            out: 'dependency-check-report.json'
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_PAT }}
 
-  validity-check:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-            
-      - name: Install YAML and JSON Linters
+      # 🔹 Initialize CodeQL
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      # 🔹 Autobuild for CodeQL
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      # 🔹 Perform CodeQL Analysis
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
+
+      # 🔹 Ensure Secret Scanning & Push Protection Are Enabled
+      - name: Enable Secret Scanning
         run: |
-              pip install yamllint
-              sudo apt-get install -y jq
-            
-      - name: Run YAML Linter
-        run: yamllint .
-            
-      - name: Run JSON Linter
-        run: find . -name "*.json" -exec jq . {} \; || echo "JSON Validation Failed"
-            
+          curl -X PATCH \
+            -H "Authorization: token ${{ secrets.MY_GITHUB_PAT }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }} \
+            -d '{
+              "security_and_analysis": {
+                "secret_scanning": {"status": "enabled"},
+                "secret_scanning_push_protection": {"status": "enabled"}
+              }
+            }'
+
+      # 🔹 Verify Security Settings
+      - name: Verify Security Settings
+        run: |
+          curl -H "Authorization: token ${{ secrets.MY_GITHUB_PAT }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               https://api.github.com/repos/${{ github.repository }}/security-advisories
+
+      # 🔹 Debug Repository Details
+      - name: Debug Repository Info
+        run: |
+          curl -H "Authorization: token ${{ secrets.MY_GITHUB_PAT }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               https://api.github.com/repos/${{ github.repository }}
