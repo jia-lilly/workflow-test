@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Error fetching job listings:', error);
         }
     }
-
+//test 14
     // Display job listings in the UI
     function displayJobListings(jobs) {
         jobListContainer.innerHTML = '';
