@@ -2,8 +2,6 @@
 on:
   push:
     branches: [ "**" ]
-    paths:
-        -".github/workflows/security.yml"
 
 jobs:
   security-checks:
