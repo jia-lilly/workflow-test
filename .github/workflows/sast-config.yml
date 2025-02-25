@@ -1,0 +1,146 @@
+name: SAST Config
+on:
+  push:
+    branches: [ "**" ]
+    paths:
+        - '.github/workflows/sast-config.yml'
+
+jobs:
+  update-secret:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository 
+        uses: actions/checkout@v4
+
+      - name: Generate JWT Token
+        id: generat_jwt
+        run: |
+          echo "Installing dependencies..."
+          pip install PyJWT cryptography requests jq
+
+          echo "Generating JWT..."
+          echo "${{ secrets.APP_PRIVATE_KEY }}" > private-key.pem
+
+          python - <<EOF
+          import jwt
+          import time
+          import os
+
+          private_key = open("private-key.pem", "r").read()
+          payload = {
+            "iat": int(time.time()),
+            "exp": int(time.time()) + 600,
+            "iss": "${{ secrets.APP_ID }}"
+          }
+          jwt_token=jwt.encode(payload, private_key, algorithm="RS256")
+          print(f"JWT_TOKEN={jwt_token}")
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+            f.write(f"JWT_TOKEN={jwt_token}\n")
+          EOF
+      - name: Get Installation Access Token
+        id: get_token
+        run: |
+          INSTALLATION_ID=$(curl -X GET "https://api.github.com/app/installations" \
+            -H "Authorization: Bearer ${{ env.JWT_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" | jq -r '.[0].id')
+
+          ACCESS_TOKEN=$(curl -X POST "https://api.github.com/app/installations/$INSTALLATION_ID/access_tokens" \
+            -H "Authorization: Bearer ${{ env.JWT_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" | jq -r '.token')
+          
+          echo "INSTALLATION_ACCESS_TOKEN=${ACCESS_TOKEN}" >> $GITHUB_ENV
+
+      - name: Update Github App Token
+        env:
+          GH_TOKEN: ${{ secrets.INSTALLATION_TOKEN }}
+        run: |
+          REPO_PUBLIC_KEY=$(curl -s -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/secrets/public-key)
+
+          KEY_ID=$(echo "$REPO_PUBLIC_KEY" | jq -r .key_id)
+          PUBLIC_KEY=$(echo "$REPO_PUBLIC_KEY" | jq -r .key)
+
+          ENCRYPTED_VALUE=$(echo -n "${{ env.INSTALLATION_ACCESS_TOKEN }}" | \
+          openssl rsautl -encrypt -pubin -inkey <(echo "$PUBLIC_KEY") | base64 -w 0)
+
+          curl -X PUT "https://api.github.com/repos/${{ github.repository }}/actions/secrets/INSTALLATION_ACCESS_TOKEN" \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -d "{\"encrypted_value\":\"$ENCRYPTED_VALUE\", \"key_id\":\"$KEY_ID\"}"
+  security-checks:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    needs: update-secret
+    permissions:
+      contents: write
+      actions: read
+      packages: write
+      security-events: write  
+
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Enable Debug Logging
+        run: |
+          echo "GITHUB_ACTIONS_RUNNER_DEBUG=1" >> $GITHUB_ENV
+          echo "GITHUB_ACTIONS_STEP_DEBUG=1" >> $GITHUB_ENV
+
+      - name: Enable Security Settings
+        run: |
+          curl -X PATCH \
+            -H "Authorization: token ${{ secrets.INSTALLATION_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }} \
+            -d '{"security_and_analysis": {
+                "code_scanning": {"status": "enabled"},
+                "secret_scanning": {"status": "enabled"},
+                "secret_scanning_push_protection": {"status": "enabled"},
+                "dependabot_security_updates": {"status": "enabled"},
+                "dependabot_alerts": {"status": "enabled"},
+                "validity_check": {"status": "enabled"}
+                }
+            }'
+
+      - name: Run Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+            path: '.'
+            project: 'MyProject'
+            format: 'JSON'
+            out: 'dependency-check-report.json'
+        env:
+          GITHUB_TOKEN: ${{ secrets.INSTALLATION_TOKEN  }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
+
+
+
+      - name: Verify Security Settings
+        run: |
+          curl -H "Authorization: token ${{ secrets.INSTALLATION_TOKEN  }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               https://api.github.com/repos/${{ github.repository }}/security-advisories
+
+      
+      - name: Debug Repository Info
+        run: |
+          curl -H "Authorization: token ${{ secrets.INSTALLATION_TOKEN  }}" \
+               -H "Accept: application/vnd.github.v3+json" \
+               https://api.github.com/repos/${{ github.repository }}
+
