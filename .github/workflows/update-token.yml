@@ -39,7 +39,7 @@ jobs:
           EOF
       - name: Get Installation Access Token
         id: get_token
-        runs: |
+        run: |
           INSTALLATION_ID=$(curl -X GET "https://api.github.com/app/installations" \
             -H "Authorization: Bearer ${{ secrets.JWT_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" | jq -r '.[0].id')
