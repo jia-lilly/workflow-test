@@ -1,0 +1,55 @@
+name: Track PR Merges
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  track:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Get changed files
+        id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILES=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files \
+            --jq '[.[].filename] | join(", ")')
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+
+      - name: Append row to CSV
+        run: |
+          CSV="merge-tracker.csv"
+
+          # Create CSV with header if it doesn't exist
+          if [ ! -f "$CSV" ]; then
+            echo "Repo,Merged By,PR Link,Files Changed,Merged At" > "$CSV"
+          fi
+
+          REPO="${{ github.repository }}"
+          ACTOR="${{ github.event.pull_request.merged_by.login }}"
+          PR_URL="${{ github.event.pull_request.html_url }}"
+          FILES="${{ steps.files.outputs.files }}"
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
+
+          # Wrap fields in quotes to handle commas in file names
+          echo "\"$REPO\",\"$ACTOR\",\"$PR_URL\",\"$FILES\",\"$TIMESTAMP\"" >> "$CSV"
+
+      - name: Commit CSV update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add merge-tracker.csv
+          git commit -m "track: merge by ${{ github.event.pull_request.merged_by.login }} via PR #${{ github.event.pull_request.number }}"
+          git push
